@@ -2,7 +2,7 @@ import ProductRepository from "../../application/repository/ProductRepository"
 import Product from "../../domain/entity/Product"
 import DatabaseConnection from "../database/DatabaseConnection"
 
-// SQLite-specific repository (no schema prefix)
+
 export default class ProductRepositorySqlite implements ProductRepository {
     constructor(readonly connection: DatabaseConnection) {}
 
@@ -44,4 +44,22 @@ export default class ProductRepositorySqlite implements ProductRepository {
             parseFloat(productData.weight)
         )
     }
+
+async findAllPaginated({ page, limit, filters }: { page:number; limit:number; filters?: any }) {
+    const ALLOWED_LIMITS = [10,20,50];
+    const itemsPerPage = ALLOWED_LIMITS.includes(limit) ? limit : 10;
+    const currentPage = Math.max(1, Math.floor(page));
+    const offset = (currentPage - 1) * itemsPerPage;
+    const countRes = await this.connection.query("select count(*) as count from product", []);
+    const totalItems = Number((Array.isArray(countRes) ? (countRes[0]?.count ?? 0) : (countRes.rows?.[0]?.count ?? 0)) || 0);
+    const dataRes = await this.connection.query("select * from product order by id_product limit ? offset ?", [itemsPerPage, offset]);
+    const rows = Array.isArray(dataRes) ? dataRes : (dataRes.rows || []);
+    const data: any[] = [];
+    for (const productData of rows) {
+        data.push({ idProduct: productData.id_product, description: productData.descrip || productData.description, price: Number(productData.price) });
+    }
+    const totalPages = Math.max(1, Math.ceil(totalItems / itemsPerPage));
+    return { data, pagination: { currentPage, totalPages, totalItems, itemsPerPage, hasNextPage: currentPage < totalPages, hasPreviousPage: currentPage > 1 } };
+}
+
 }
